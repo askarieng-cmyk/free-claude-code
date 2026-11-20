@@ -1,0 +1,43 @@
+name: FCC isolated smoke test
+on:
+  push:
+    branches:
+      - fcc-mobile-smoke-test-20261120
+    paths:
+      - .github/workflows/fcc-mobile-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fork test branch
+        uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.13"
+          python-version: "3.14.10"
+      - name: Install locked runtime dependencies
+        run: uv sync --locked --no-dev --python 3.14.10
+      - name: Verify FCC installation and diagnostic output
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync fcc-doctor > /tmp/fcc-doctor.txt
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          raw = Path("/tmp/fcc-doctor.txt").read_text()
+          start = raw.find("{")
+          if start < 0:
+              raise SystemExit("FCC doctor returned no JSON")
+          decoder = json.JSONDecoder()
+          data, _ = decoder.raw_decode(raw[start:])
+          assert data.get("version"), "Missing FCC version"
+          print("FCC doctor ran successfully. Version:", data["version"])
+          print("Configuration:", data.get("configuration", {}).get("status", "unknown"))
+          print("This smoke test does not verify any provider API access.")
+          PY
